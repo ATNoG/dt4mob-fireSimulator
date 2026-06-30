@@ -1,0 +1,14 @@
+# templates/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-pvc
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.storage.className | default "standard" }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size}}

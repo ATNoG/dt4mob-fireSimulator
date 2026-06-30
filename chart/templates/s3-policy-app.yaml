@@ -1,0 +1,33 @@
+apiVersion: seaweed.seaweedfs.com/v1
+kind: S3Policy
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-policy
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+spec:
+  seaweedRef:
+    name: {{ .Values.seaweedfs.clusterName }}
+    namespace: {{ .Values.seaweedfs.namespace }}
+  statements:
+    - effect: Allow
+      actions: [s3:ListBucket,s3:GetBucketLocation]
+      resources: [{{ .Values.seaweedfs.bucketName }}]
+    - effect: Allow
+      actions: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+      resources: [{{ .Values.seaweedfs.bucketName }}/*]
+---
+apiVersion: seaweed.seaweedfs.com/v1
+kind: S3PolicyBinding
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-policy-binding
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+spec:
+  seaweedRef:
+    name: {{ .Values.seaweedfs.clusterName }}
+    namespace: {{ .Values.seaweedfs.namespace }}
+  policyRef:
+    name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-policy
+  subjects:
+    - kind: S3Identity
+      name: {{ include "dt4mob-fire-simulation.fullname" . }}-seaweed-user

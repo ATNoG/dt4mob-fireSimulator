@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}
+spec:
+  selector:
+    {{- include "dt4mob-fire-simulation.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http 

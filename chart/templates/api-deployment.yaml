@@ -1,0 +1,107 @@
+{{- $secretName := .Values.service.config.secret.existingSecret | default (printf "%s-secret" (include "dt4mob-fire-simulation.fullname" .)) -}}
+{{- $config := .Values.service.config -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-api
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "dt4mob-fire-simulation.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dt4mob-fire-simulation.selectorLabels" . | nindent 8 }}
+    spec:
+      initContainers:
+      - name: wait-for-rasters
+        image: alpine
+        command: ["sh", "-c", "until [ -f /data/processed/.done ]; do sleep 5; done"]
+        volumeMounts:
+          - name: data-volume
+            mountPath: /data
+      containers:
+        - name: api
+          image: {{ .Values.images.service.repository }}:{{ .Values.images.service.tag }}
+          imagePullPolicy: {{ .Values.images.service.imagePullPolicy }}
+          ports:
+          - name: http
+            containerPort: 8080
+          env:
+          - name: PYTHONUNBUFFERED
+            value: "1"
+
+          - name: LOG_LEVEL
+            value: {{ $config.logLevel}}
+          - name: RISK_AREAS_DIR
+            value: {{ $config.riskyAreasPath | quote }}
+          - name: FOREFIRE_BIN
+            value: {{ $config.forefireBin | quote }}
+          - name: SIM_BASE_DIR
+            value: {{ $config.simBaseDir | quote }}
+
+          - name: DITTO__API_URL
+            value: {{ $config.ditto.apiUrl | quote }}
+          - name: DITTO__BASE_API_PATH
+            value: {{ $config.ditto.baseApiPath}}
+          - name: DITTO__WS__PATH
+            value: {{ $config.ditto.wsPath}}
+          
+          - name: AUTH__USERNAME_FILE
+            value: "/run/secrets/dt4mob/creds/username"
+          - name: AUTH__PASSWORD_FILE
+            value: "/run/secrets/dt4mob/creds/password"
+          {{- if .Values.service.config.auth.caSecret }}
+          - name: AUTH__CA_CRT_FILE
+            value: "/run/secrets/dt4mob/tls/tls.crt"
+          {{- end }}
+
+          - name: S3__URL_EXTERNAL
+            value: {{ $config.s3.UrlInternal | quote }}
+          - name: S3__URL_INTERNAL
+            value: {{ $config.s3.UrlExternal | quote }}
+          - name: S3__BUCKET
+            value: {{ .Values.seaweedfs.bucketName | quote }}
+          - name: S3__ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-secret
+                key: accessKey
+          - name: S3__SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-secret
+                key: secretKey
+          
+          - name: AUTH__TOKEN_ENDPOINT
+            value: {{ $config.auth.url | quote }}
+          - name:   AUTH__CLIENT_ID
+            value: {{ $config.auth.clientId | quote }}
+            
+              
+              
+          volumeMounts:
+          - name: data-volume
+            mountPath: /data
+          - name: credentials
+            readOnly: true
+            mountPath: "/run/secrets/dt4mob/creds"
+          {{- if .Values.service.config.auth.caSecret }}
+          - name: tls
+            readOnly: true
+            mountPath: "/run/secrets/dt4mob/tls"
+          {{- end }}
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: {{ include "dt4mob-fire-simulation.fullname" . }}-pvc
+      - name: credentials
+        secret:
+          secretName: {{ $secretName }}
+      {{- if .Values.service.config.auth.caSecret }}
+      - name: tls
+        secret:
+          secretName: {{ tpl .Values.service.config.auth.caSecret . | quote }}
+      {{- end }}

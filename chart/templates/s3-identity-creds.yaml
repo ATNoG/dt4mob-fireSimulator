@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-secret
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+type: Opaque
+# You can leave 'data' or 'stringData' empty, as the SeaweedFS operator 
+# will automatically populate this secret with the accessKey and secretKey.
+data: {}
+---
+apiVersion: seaweed.seaweedfs.com/v1
+kind: S3Identity
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-seaweed-user
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+spec:
+  seaweedRef:
+    name: {{ .Values.seaweedfs.clusterName }}
+    namespace: {{ .Values.seaweedfs.namespace }}
+---
+apiVersion: seaweed.seaweedfs.com/v1
+kind: S3Credentials
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-seaweed-creds
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+spec:
+  seaweedRef:
+    name: {{ .Values.seaweedfs.clusterName }}
+    namespace: {{ .Values.seaweedfs.namespace }}
+  identityRef:
+    name: {{ include "dt4mob-fire-simulation.fullname" . }}-seaweed-user
+  secretRef:
+    name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-secret

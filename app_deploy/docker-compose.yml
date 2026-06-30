@@ -1,0 +1,48 @@
+# DT4MOB — Wildfire Digital Twin
+# Compatible with: docker compose v2 and podman-compose
+# SELinux: all host-path bind mounts use :z (shared relabelling)
+# Podman note: if using rootless podman, ensure subuid/subgid are configured.
+
+name: dt4mob
+
+services:
+  # # ── Pre-process rasters (Task: Runs once and exits) ──────────────────────────
+  # prepare_rasters_job:
+  #   build:
+  #     context: ./data_preparation
+  #     dockerfile: Dockerfile
+  #   image: atnog-harbor.av.it.pt/dt4mob/dt4mob-raster-prepare-fire-simulator:latest
+  #   restart: "no"
+  #   env_file: .env
+  #   volumes:
+  #     - ./data:/data:z
+
+  # ── Ingestion / FastAPI ──────────────────────────────────────────────────────
+  ingestion:
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    image: atnog-harbor.av.it.pt/dt4mob/dt4mob-fire-simulator:latest
+    restart: unless-stopped
+    env_file: .env
+    # depends_on:
+    #   prepare_rasters_job:
+    #     condition: service_completed_successfully
+    volumes:
+      - ./data:/data:z
+    network_mode: host
+
+  # # ── ForeFire engine ──────────────────────────────────────────────────────────
+  # forefire:
+  #   build:
+  #     context: ./forefire
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./data:/data:z
+  #   ports:
+  #     - "127.0.0.1:8001:8001" # Note: Corrected typo from 800 to 8001
+  #   security_opt:
+  #     - label=disable
+
+volumes: {}

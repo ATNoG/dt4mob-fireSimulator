@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "dt4mob-fire-simulation.fullname" . }}-raster-processor
+  annotations:
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+  labels:
+    {{- include "dt4mob-fire-simulation.labels" . | nindent 4 }}
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - {{ include "dt4mob-fire-simulation.name" . }}
+              topologyKey: "kubernetes.io/hostname"
+      restartPolicy: OnFailure
+      containers:
+        - name: processor
+          image: {{ .Values.images.rasterJob.repository }}:{{ .Values.images.rasterJob.tag }}
+          imagePullPolicy: {{ .Values.images.rasterJob.imagePullPolicy }}
+          env:
+          - name: COS_URL
+            value: {{ .Values.rasterJob.fileUrls.cosUrl | quote }}
+          - name: DEM_URL
+            value: {{ .Values.rasterJob.fileUrls.demUrl | quote }}
+          - name: GDAL_TMPDIR
+            value: "/data/gdal_tmp"
+          - name: GDAL_CACHEMAX
+            value: {{ .Values.rasterJob.config.gdalCacheMax | quote }}
+          - name: CHECK_DISK_FREE_SPACE
+            value: {{ .Values.rasterJob.config.checkDiskFreeSpace | quote }}
+
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-secret
+                key: accessKey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "dt4mob-fire-simulation.fullname" . }}-s3-secret
+                key: secretKey
+          - name: S3_ENDPOINT
+            value: {{ .Values.service.config.s3.UrlInternal | quote }}
+          - name: S3_BUCKET
+            value: {{ .Values.seaweedfs.bucketNameJob | quote }}
+          - name: RISK_AREAS_FILE_KEY
+            value: "risk_areas.geojson"
+          
+          resources:
+            requests:
+              memory: "3Gi"
+              cpu: "1"
+            limits:
+              memory: "8Gi"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ include "dt4mob-fire-simulation.fullname" . }}-pvc

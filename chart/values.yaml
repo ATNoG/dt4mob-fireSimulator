@@ -1,0 +1,56 @@
+images:
+  service:
+    repository: atnog-harbor.av.it.pt/dt4mob/dt4mob-fire-simulator
+    tag: latest
+    imagePullPolicy: Always
+  rasterJob:
+    repository: atnog-harbor.av.it.pt/dt4mob/dt4mob-raster-prepare-fire-simulator
+    tag: latest
+    imagePullPolicy: Always
+
+  
+service:
+  config:
+    logLevel: "INFO"
+    riskyAreasPath: "/data/raw/brisa_zones.geojson"
+    simBaseDir: "/data/simulations"
+    forefireBin: "/usr/local/bin/forefire"
+
+    ditto:
+      apiUrl: "http://dt4mob-ditto-gateway:8080"
+      baseApiPath: "/api/2"
+      wsPath: "/ws/2"
+
+    s3:
+      UrlInternal: "http://seaweed-s3.seaweedfs.svc.cluster.local:8333"
+      UrlExternal: "http://localhost:8333"
+
+    secret:
+      # existingSecret: 
+      userName: 
+      password: 
+
+    auth:
+      clientId: ditto
+      caSecret: "dt4mob-internal-keycloak-tls"
+      url: "https://dt4mob-keycloak:8443/auth/realms/dt4mob/protocol/openid-connect/token"
+
+rasterJob:
+  fileUrls:
+    cosUrl: https://geo2.dgterritorio.gov.pt/cosc/COSc2025.zip
+    demUrl: http://gis.ciimar.up.pt/gis-data/lidar-dgt/MDT-10m-PT.tif
+  config:
+    gdalCacheMax: 128
+    checkDiskFreeSpace: False
+  
+seaweedfs:
+  clusterName: seaweed
+  namespace: seaweedfs
+  bucketName: dt4mob-public
+  bucketNameJob: fire-sim-briza-zones
+  s3Port: 8333
+
+storage:
+  className: local-path
+  size: 20Gi
+

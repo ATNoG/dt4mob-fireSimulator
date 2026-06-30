@@ -1,0 +1,7 @@
+apiVersion: v2
+name: dt4mob-fire-simulator
+description: A Helm chart for the dt4mob-fire-simulator extension of the DT4Mob project.
+
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
