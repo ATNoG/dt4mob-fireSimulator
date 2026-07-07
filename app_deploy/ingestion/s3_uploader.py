@@ -21,7 +21,7 @@ def upload_simulation_dir_to_seaweed_minio(simulationId: str,type_send: Literal[
 
     s3_prefix = simulationId.replace(":", "_").strip("/")
     local_dir = os.path.join(config.simulations_dir, simulationId)
-    endpoint_url = s3_vars.url_external
+    endpoint_url = s3_vars.url_internal
     bucket_name = s3_vars.bucket
 
     mimetypes.add_type('model/gltf-binary', '.glb')
