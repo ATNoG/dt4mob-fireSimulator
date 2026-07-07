@@ -10,8 +10,7 @@ class Perimeter(BaseModel):
 
 
 class DittoBodyBuilder:
-    def __init__(self, policy_id: str, thing_id: str | None = None, expiry_ts: datetime | None = None):
-        self.policy_id = policy_id
+    def __init__(self, thing_id: str | None = None, expiry_ts: datetime | None = None):
         self.thing_id = thing_id if thing_id is not None else "fire:incident_" + uuid.uuid4().hex
         self.ignition_point: Point | None = None
         self.state: fireState | None = None
@@ -56,6 +55,6 @@ class DittoBodyBuilder:
     def build(self) -> fireIncidentThing:
         attributes = self._attributes()        
         features = self._features()
-        thing = fireIncidentThing(thing_id=self.thing_id, policy_id=self.policy_id, attributes=attributes, features=features)
+        thing = fireIncidentThing(thing_id=self.thing_id, attributes=attributes, features=features)
         return thing
     

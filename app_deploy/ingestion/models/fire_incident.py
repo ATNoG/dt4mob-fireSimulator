@@ -51,7 +51,7 @@ class fireIncidentThingFeatures(BaseModel):
 
 class fireIncidentThing(BaseModel):
     thing_id: Annotated[str, Field(alias="thingId",exclude=True)]
-    policy_id: Annotated[str,Field(alias="policyId")]
+    policy_id: Annotated[str | None, Field(alias="policyId")] = None
     attributes: fireIncidentThingAttributes | None = None
     features: fireIncidentThingFeatures | None = None
 

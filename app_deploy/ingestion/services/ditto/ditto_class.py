@@ -34,6 +34,7 @@ class DittoClient:
 
         self._search_things_url = ditto_settings.get_base_url() + "/search/things"
         self._things_url = ditto_settings.get_base_url() + "/things"
+        logging.info(f"DittoClient initialized with base URL: {self._ditto_settings.get_base_url()}")
         self._responses = {}
 
     def _get_auth_header(self) -> str:
@@ -171,11 +172,13 @@ class DittoClient:
 
     def update_fire_incident(self, incident: fireIncidentThing) -> None:
         """Synchronous update method using standard httpx.Client"""
-        url = urljoin(self._things_url, incident.thing_id)
+        base_url = self._things_url if self._things_url.endswith('/') else f"{self._things_url}/"
+
+        url = f"{base_url}{incident.thing_id}"
 
         headers = get_headers(Action.UPDATE)
         headers["Authorization"] = self._get_auth_header()
-
+        logging.info(f"[fire_incident] Updating incident in url {url}")
         body = incident.model_dump(by_alias=True, exclude_none=True, mode="json")
 
         try:
