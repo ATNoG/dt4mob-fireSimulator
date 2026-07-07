@@ -204,7 +204,7 @@ def process_ignition(message):
     urls = upload_simulation_dir_to_seaweed_minio(thing_id,type_send="cone")
     polygons = [urls["fire_cone.glb"]]
     cone = urls["cone_horizon.geojson"]
-    thing_builder = DittoBodyBuilder(policy_id="fire:default",thing_id=thing_id, expiry_ts=expire_min).ignition(fire_ignition["lat"], fire_ignition["lon"]).cones(cone).fire_state(fireState.SIMULATING).polygon(polygons)
+    thing_builder = DittoBodyBuilder(thing_id=thing_id, expiry_ts=expire_min).ignition(fire_ignition["lat"], fire_ignition["lon"]).cones(cone).fire_state(fireState.SIMULATING).polygon(polygons)
     incident = thing_builder.build()
     ditto_client.update_fire_incident(incident)
     
@@ -215,7 +215,7 @@ def process_ignition(message):
         logger.info("[ignition] Cone intersects with risk areas, launching pipeline")
         # 3. Launch pipeline in background
         expire_min = datetime.now() + timedelta(minutes=20)
-        new_thing_builder = DittoBodyBuilder(policy_id="fire:default", thing_id=incident.thing_id, expiry_ts=expire_min).fire_state(fireState.SIMULATING)
+        new_thing_builder = DittoBodyBuilder(thing_id=incident.thing_id, expiry_ts=expire_min).fire_state(fireState.SIMULATING)
         ditto_client.update_fire_incident(new_thing_builder.build())
         if(run_pipeline(incident.thing_id,fire_ignition["lat"],fire_ignition["lon"])):
             state = fireState.SIMULATED
@@ -234,7 +234,7 @@ def process_ignition(message):
         perimeters.append(urls[f"step_{front}.geojson"])
     #5 Update Ditto
     expire_min = datetime.now() + timedelta(minutes=10)
-    thing_builder = DittoBodyBuilder(policy_id="fire:default",thing_id=thing_id,expiry_ts=expire_min)
+    thing_builder = DittoBodyBuilder(thing_id=thing_id,expiry_ts=expire_min)
     match state:
         case fireState.FAILED:
             thing_builder = thing_builder.fire_state(fireState.FAILED)
