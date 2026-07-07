@@ -17,7 +17,21 @@ RUN git clone --depth=1 https://github.com/forefireAPI/forefire.git /forefire
 
 WORKDIR /forefire
 
-RUN sh cmake-build.sh
+# 1. Clean build directory initialization
+RUN find . -name "CMakeLists.txt" -exec sed -i 's/-march=native//g' {} + \
+    && find . -name "CMakeLists.txt" -exec sed -i 's/-msse4.2//g' {} +
+
+RUN mkdir -p build
+
+# 2. Force compiler flags compatible with your AVX/AVX2 runtime CPU 
+#    (x86-64-v3 matches AVX2, preventing the compiler from generating AVX-512)
+RUN cmake -S . -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_FLAGS="-march=x86-64-v2 -O2" \
+    -DCMAKE_CXX_FLAGS="-march=x86-64-v2 -O2"
+
+# 3. Compile the code
+RUN cmake --build build --config Release -j$(nproc)
 
 RUN cmake --install build --prefix /forefire/install
 
