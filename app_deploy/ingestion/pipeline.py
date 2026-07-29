@@ -219,28 +219,33 @@ def process_ignition(message):
         ditto_client.update_fire_incident(new_thing_builder.build())
         if(run_pipeline(incident.thing_id,fire_ignition["lat"],fire_ignition["lon"])):
             state = fireState.SIMULATED
+                #4 Upload files generated
+            urls = urls | upload_simulation_dir_to_seaweed_minio(thing_id,type_send="perimeters")
+            logger.debug(urls)
+            polygons.append(urls["fire_simulation.glb"])
+            perimeters: list[str] = []
+            for front in FIRE_FRONTS:
+                perimeters.append(urls[f"step_{front}.geojson"])
         else:
             state = fireState.FAILED
     else:
         state = fireState.NO_RISK
         logger.info("[ignition] Cone does not intersect with any risk areas, no pipeline launched")
-    
-    #4 Upload files generated
-    urls = urls | upload_simulation_dir_to_seaweed_minio(thing_id,type_send="perimeters")
-    logger.debug(urls)
-    polygons.append(urls["fire_simulation.glb"])
-    perimeters: list[str] = []
-    for front in FIRE_FRONTS:
-        perimeters.append(urls[f"step_{front}.geojson"])
+
     #5 Update Ditto
-    expire_min = datetime.now() + timedelta(minutes=10)
-    thing_builder = DittoBodyBuilder(thing_id=thing_id,expiry_ts=expire_min)
+    thing_builder = None
     match state:
         case fireState.FAILED:
+            expire_min = datetime.now() + timedelta(minutes=10)
+            thing_builder = DittoBodyBuilder(thing_id=thing_id,expiry_ts=expire_min)
             thing_builder = thing_builder.fire_state(fireState.FAILED)
         case fireState.NO_RISK:
+            expire_min = datetime.now() + timedelta(minutes=10)
+            thing_builder = DittoBodyBuilder(thing_id=thing_id,expiry_ts=expire_min)
             thing_builder = thing_builder.fire_state(fireState.NO_RISK)
         case fireState.SIMULATED:
+            expire_min = datetime.now() + timedelta(minutes=120)
+            thing_builder = DittoBodyBuilder(thing_id=thing_id,expiry_ts=expire_min)
             thing_builder = thing_builder.fire_state(fireState.SIMULATED).polygon(polygons).perimeters(perimeters)
     
     ditto_client.update_fire_incident(thing_builder.build())

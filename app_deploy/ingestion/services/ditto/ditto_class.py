@@ -31,6 +31,8 @@ class DittoClient:
         self._client = client
         self._auth_service = auth_service
         self._ditto_settings = ditto_settings
+        self._fire_namespace = None
+        self._refresh_task = None
 
         self._search_things_url = ditto_settings.get_base_url() + "/search/things"
         self._things_url = ditto_settings.get_base_url() + "/things"
@@ -41,11 +43,10 @@ class DittoClient:
         token = self._auth_service.get_token()
         return f"Bearer {token}"
 
-    async def connect(self, fire_namespace, process_callable: Callable):
+    async def _open_connection(self):
         uri = self._ditto_settings.get_base_ws()
-        logging.debug(f"URIF:{uri}")
         auth_header = self._get_auth_header()
-        
+
         ssl_context = None
         if uri.startswith("wss://"):
             ssl_context = ssl.create_default_context()
@@ -53,14 +54,15 @@ class DittoClient:
             ssl_context.verify_mode = ssl.CERT_NONE
 
         self._ws = await ws_connect(
-            uri, additional_headers={"Authorization": auth_header},ssl=ssl_context
+            uri, additional_headers={"Authorization": auth_header}, ssl=ssl_context
         )
         logging.info(f"Connected to ditto at {uri}")
-        
-        asyncio.create_task(self.listen_loop(process_callable))
 
+    async def connect(self, fire_namespace, process_callable: Callable):
+        self._fire_namespace = fire_namespace
+        await self._open_connection()
+        asyncio.create_task(self.listen_loop(process_callable))
         self._refresh_task = asyncio.create_task(self._token_refresh_loop())
-        
         await self.send_control_message(f"START-SEND-EVENTS?namespaces={fire_namespace}&filter=eq(attributes/state,'new_ignition')")
 
     async def _token_refresh_loop(self):
@@ -90,53 +92,83 @@ class DittoClient:
         except asyncio.CancelledError:
             logging.debug("Token supervisor loop task cleanly cancelled.")
         except Exception as e:
+            self._ws = None
             logging.error(f"Error encountered in token lifetime supervisor: {e}", exc_info=True)
 
 
-    async def listen_loop(self,process: Callable):
+    async def listen_loop(self, process: Callable):
         if self._ws is None:
             raise DittoConnectionError("No Websocket connection available.")
 
-        try:
-            async for message in self._ws:
-                logging.debug("Received WebSocket payload: %s", message)
-                
-                if isinstance(message, str) and message.endswith(":ACK"):
-                    future = self._responses.pop(message, None)
-                    if future and not future.done():
-                        future.set_result(True)
-                    continue
+        retry_delay = 1.0
+        max_delay = 60.0
 
-                try:
-                    data = json.loads(message)
-                except (json.JSONDecodeError, TypeError) as e:
-                    logging.warning(f"Received message that is neither a control ACK nor valid JSON: {e}")
-                    continue
+        while True:
+            try:
+                async for message in self._ws:
+                    logging.debug("Received WebSocket payload: %s", message)
 
-                corr_id = data.get("headers", {}).get("correlation-id")
-                
-                if corr_id and corr_id in self._responses:
-                    future = self._responses.pop(corr_id, None)
-                    if future and not future.done():
-                        future.set_result(data)
-                    continue
-                logging.info(f"Processing streamed event topic: {data.get('topic')}")
-                
-                coro = asyncio.to_thread(process, data)
-                asyncio.create_task(coro)
+                    if isinstance(message, str) and message.endswith(":ACK"):
+                        future = self._responses.pop(message, None)
+                        if future and not future.done():
+                            future.set_result(True)
+                        continue
 
-        except Exception as e:
-            logging.error(f"Fatal error in WebSocket listen loop: {e}", exc_info=True)
-        finally:
-            # Prevent hanging awaits if the loop terminates unexpectedly
-            logging.warning("WebSocket listen loop stopped. Cleaning up pending futures.")
-            for key, future in self._responses.items():
-                if not future.done():
-                    future.set_exception(DittoConnectionError("WebSocket disconnected while waiting for response."))
-            self._responses.clear()
+                    try:
+                        data = json.loads(message)
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logging.warning(f"Received message that is neither a control ACK nor valid JSON: {e}")
+                        continue
+
+                    corr_id = data.get("headers", {}).get("correlation-id")
+
+                    if corr_id and corr_id in self._responses:
+                        future = self._responses.pop(corr_id, None)
+                        if future and not future.done():
+                            future.set_result(data)
+                        continue
+                    logging.info(f"Processing streamed event topic: {data.get('topic')}")
+
+                    coro = asyncio.to_thread(process, data)
+                    asyncio.create_task(coro)
+
+            except asyncio.CancelledError:
+                logging.debug("Listen loop cancelled.")
+                break
+            except Exception as e:
+                logging.error(f"Fatal error in WebSocket listen loop: {e}", exc_info=True)
+            finally:
+                logging.warning("WebSocket listen loop stopped. Cleaning up pending futures.")
+                for key, future in self._responses.items():
+                    if not future.done():
+                        future.set_exception(DittoConnectionError("WebSocket disconnected while waiting for response."))
+                self._responses.clear()
+
+            # Connection lost — signal token refresh to stop
+            self._ws = None
+            if self._refresh_task is not None and not self._refresh_task.done():
+                self._refresh_task.cancel()
+                self._refresh_task = None
+
+            logging.info(f"Reconnecting in {retry_delay:.1f}s...")
+            await asyncio.sleep(retry_delay)
+
+            try:
+                await self._open_connection()
+                await self.send_control_message(
+                    f"START-SEND-EVENTS?namespaces={self._fire_namespace}&filter=eq(attributes/state,'new_ignition')"
+                )
+                self._refresh_task = asyncio.create_task(self._token_refresh_loop())
+                retry_delay = 1.0
+                logging.info("Reconnected and resubscribed successfully.")
+            except Exception as e:
+                logging.error(f"Reconnect failed: {e}", exc_info=True)
+                retry_delay = min(retry_delay * 2, max_delay)
 
 
     async def close(self):
+        if self._refresh_task is not None and not self._refresh_task.done():
+            self._refresh_task.cancel()
         if self._ws is not None:
             await self._ws.close()
 
